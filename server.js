@@ -9,6 +9,8 @@ import { getProducts } from "./scraper.js";
 const app = express();
 const PORT = 3000;
 
+app.use(cors());
+
 app.get("/products", async (req, res) => {
     const categoryUrl = "https://www.primark.com/en-gb/c/sale/men";
     const maxPages = parseInt(req.query.pages) || 2;
