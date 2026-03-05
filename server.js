@@ -3,6 +3,7 @@
 // It should say "API running on http://localhost:3000"
 
 import express from "express";
+import cors from "cors";
 import { getProducts } from "./scraper.js";
 
 const app = express();
