@@ -24,7 +24,7 @@
                     li.innerHTML = `
                         <img src="${p.img}" width="50" style="vertical-align:middle;margin-right:8px;">
                         <a href="${p.url}" target="_blank">${p.title}</a>
-                        ${p.smallOutOfStock ? "<strong>(Small out of stock)</strong>" : ""}
+                        ${p.smallOutOfStock ? "<strong>(Small may be out of stock)</strong>" : ""}
                     `;
                     list.appendChild(li);
                 });
