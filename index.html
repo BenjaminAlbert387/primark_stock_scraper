@@ -2,37 +2,396 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Primark Sale Products</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Primark Sale — Size S Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0f0f0f;
+            --surface: #1a1a1a;
+            --surface2: #222;
+            --border: #2e2e2e;
+            --text: #f0f0f0;
+            --muted: #888;
+            --accent: #e8ff47;
+            --red: #ff4545;
+            --green: #3ddc84;
+            --font-display: 'Bebas Neue', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            padding: 0 0 80px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding: 40px 48px 28px;
+            border-bottom: 1px solid var(--border);
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .header-left h1 {
+            font-family: var(--font-display);
+            font-size: clamp(48px, 7vw, 88px);
+            letter-spacing: 0.02em;
+            line-height: 1;
+            color: var(--text);
+        }
+
+        .header-left h1 span {
+            color: var(--accent);
+        }
+
+        .header-left p {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 6px;
+            font-weight: 300;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .load-btn {
+            background: var(--accent);
+            color: #0f0f0f;
+            border: none;
+            padding: 14px 32px;
+            font-family: var(--font-display);
+            font-size: 20px;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+            flex-shrink: 0;
+        }
+
+        .load-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .load-btn:active { transform: translateY(0); }
+        .load-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 20px 48px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 6px 16px;
+            font-family: var(--font-body);
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+            border-radius: 2px;
+        }
+
+        .filter-btn:hover { border-color: var(--text); color: var(--text); }
+        .filter-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+        .result-count {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        /* States */
+        .state-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 14px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1px;
+            background: var(--border);
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Card */
+        .card {
+            background: var(--surface);
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+            position: relative;
+            overflow: hidden;
+            animation: fadeUp 0.3s ease both;
+        }
+
+        .card:hover { background: var(--surface2); }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .card-img-wrap {
+            position: relative;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            background: #1e1e1e;
+        }
+
+        .card-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+            display: block;
+        }
+
+        .card:hover .card-img-wrap img { transform: scale(1.04); }
+
+        /* Stock badge on image */
+        .stock-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-family: var(--font-display);
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 2px;
+            z-index: 1;
+        }
+
+        .stock-badge.in-stock {
+            background: var(--green);
+            color: #0a1a10;
+        }
+
+        .stock-badge.out-stock {
+            background: var(--red);
+            color: #fff;
+        }
+
+        .stock-badge.unknown {
+            background: #444;
+            color: var(--muted);
+        }
+
+        .card-body {
+            padding: 14px 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1.4;
+        }
+
+        .card-stock-line {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-top: auto;
+            padding-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-stock-line::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .card-stock-line.in-stock { color: var(--green); }
+        .card-stock-line.in-stock::before { background: var(--green); }
+
+        .card-stock-line.out-stock { color: var(--red); }
+        .card-stock-line.out-stock::before { background: var(--red); }
+
+        .card-stock-line.unknown { color: var(--muted); }
+        .card-stock-line.unknown::before { background: var(--muted); }
+    </style>
 </head>
 <body>
-    <h1>Primark Sale</h1>
-    <button onclick="loadProducts()">Load Products</button>
-    <ul id="product-list"></ul>
 
-    <script>
-        async function loadProducts() {
-            const list = document.getElementById("product-list");
-            list.innerHTML = "Loading...";
+<header>
+    <div class="header-left">
+        <h1>PRIMARK <span>SALE</span></h1>
+        <p>Size S stock tracker — en-gb</p>
+    </div>
+    <button class="load-btn" id="load-btn" onclick="loadProducts()">Load Products</button>
+</header>
 
-            try {
-                const res = await fetch("http://localhost:3000/products");
-                const products = await res.json();
+<div class="filter-bar" id="filter-bar" style="display:none;">
+    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="filter-btn" onclick="setFilter('in', this)">S In Stock</button>
+    <button class="filter-btn" onclick="setFilter('out', this)">S Out of Stock</button>
+    <span class="result-count" id="result-count"></span>
+</div>
 
-                list.innerHTML = "";
-                products.forEach(p => {
-                    const li = document.createElement("li");
-                    li.innerHTML = `
-                        <img src="${p.img}" width="50" style="vertical-align:middle;margin-right:8px;">
-                        <a href="${p.url}" target="_blank">${p.title}</a>
-                        ${p.smallOutOfStock ? "<strong>(Small may be out of stock)</strong>" : ""}
-                    `;
-                    list.appendChild(li);
-                });
-            } catch (err) {
-                list.innerHTML = "Failed to load products.";
-                console.error(err);
-            }
+<div id="content">
+    <div class="state-box">
+        <span>Press load to fetch products</span>
+    </div>
+</div>
+
+<script>
+    let allProducts = [];
+    let currentFilter = 'all';
+
+    async function loadProducts() {
+        const btn = document.getElementById('load-btn');
+        const content = document.getElementById('content');
+        const filterBar = document.getElementById('filter-bar');
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+        filterBar.style.display = 'none';
+
+        content.innerHTML = `
+            <div class="state-box">
+                <div class="spinner"></div>
+                <span>Fetching products...</span>
+            </div>`;
+
+        try {
+            const res = await fetch('http://localhost:3000/products');
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            allProducts = await res.json();
+
+            filterBar.style.display = 'flex';
+            setFilter(currentFilter);
+
+            btn.textContent = 'Refresh';
+        } catch (err) {
+            content.innerHTML = `
+                <div class="state-box">
+                    <span>Failed to load — is the server running?</span>
+                </div>`;
+            console.error(err);
+            btn.textContent = 'Load Products';
         }
-    </script>
+
+        btn.disabled = false;
+    }
+
+    function setFilter(filter, el) {
+        currentFilter = filter;
+
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        if (el) el.classList.add('active');
+
+        let filtered = allProducts;
+        if (filter === 'in')  filtered = allProducts.filter(p => p.smallOutOfStock === false);
+        if (filter === 'out') filtered = allProducts.filter(p => p.smallOutOfStock === true);
+
+        document.getElementById('result-count').textContent = `${filtered.length} item${filtered.length !== 1 ? 's' : ''}`;
+        renderProducts(filtered);
+    }
+
+    function renderProducts(products) {
+        const content = document.getElementById('content');
+
+        if (products.length === 0) {
+            content.innerHTML = `<div class="state-box"><span>No products match this filter</span></div>`;
+            return;
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        products.forEach((p, i) => {
+            let stockClass, badgeLabel, stockLineClass, stockLineText;
+
+            if (p.smallOutOfStock === false) {
+                stockClass = 'in-stock';
+                badgeLabel = 'S Available';
+                stockLineClass = 'in-stock';
+                stockLineText = 'Size S in stock';
+            } else if (p.smallOutOfStock === true) {
+                stockClass = 'out-stock';
+                badgeLabel = 'S Sold Out';
+                stockLineClass = 'out-stock';
+                stockLineText = 'Size S out of stock';
+            } else {
+                stockClass = 'unknown';
+                badgeLabel = 'S Unknown';
+                stockLineClass = 'unknown';
+                stockLineText = 'Size S status unknown';
+            }
+
+            const card = document.createElement('a');
+            card.className = 'card';
+            card.href = p.url;
+            card.target = '_blank';
+            card.style.animationDelay = `${Math.min(i * 30, 400)}ms`;
+
+            card.innerHTML = `
+                <div class="card-img-wrap">
+                    <img src="${p.img}" alt="${p.title}" loading="lazy">
+                    <span class="stock-badge ${stockClass}">${badgeLabel}</span>
+                </div>
+                <div class="card-body">
+                    <div class="card-title">${p.title}</div>
+                    <div class="card-stock-line ${stockLineClass}">${stockLineText}</div>
+                </div>
+            `;
+
+            grid.appendChild(card);
+        });
+
+        content.innerHTML = '';
+        content.appendChild(grid);
+    }
+</script>
 </body>
 </html>
