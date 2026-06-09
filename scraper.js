@@ -1,6 +1,8 @@
 import { chromium } from "playwright";
 
-export async function getProducts(categoryUrl, maxPages = 2) {
+// onProgress(current, total) is an optional callback called after each product
+// is checked — used by the server to expose live progress via /progress endpoint.
+export async function getProducts(categoryUrl, maxPages = 2, onProgress = null) {
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
         userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -86,6 +88,8 @@ export async function getProducts(categoryUrl, maxPages = 2) {
     // Step 2: Check stock in parallel using a concurrency pool
     const results = [];
     const queue = [...productUrls];
+    // Tell the server the total upfront so the progress bar has a denominator
+    if (onProgress) onProgress(0, productUrls.length);
 
     async function worker() {
         const page = await makePage();
@@ -183,6 +187,9 @@ export async function getProducts(categoryUrl, maxPages = 2) {
             } catch (err) {
                 console.warn(`  Skipping — ${productUrl}: ${err.message.split('\n')[0]}`);
             }
+
+            // Report progress after every product regardless of success/skip/error
+            if (onProgress) onProgress(productUrls.length - queue.length, productUrls.length);
         }
 
         await page.close();

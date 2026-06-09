@@ -87,9 +87,3 @@ http://localhost:3000
 * Check console logs to see which SKUs are being fetched.
 * Increase timeouts in `server.js` if pages fail to load.
 * Ensure your network allows Chromium to access the Primark site.
-
----
-
-This README is **enough for someone else to run the scraper live** without changing code.
-
----

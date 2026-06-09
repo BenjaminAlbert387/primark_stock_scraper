@@ -49,9 +49,7 @@
             color: var(--text);
         }
 
-        .header-left h1 span {
-            color: var(--accent);
-        }
+        .header-left h1 span { color: var(--accent); }
 
         .header-left p {
             color: var(--muted);
@@ -122,23 +120,55 @@
             align-items: center;
             justify-content: center;
             min-height: 300px;
-            gap: 12px;
+            gap: 16px;
             color: var(--muted);
             font-size: 14px;
             letter-spacing: 0.04em;
             text-transform: uppercase;
         }
 
-        .spinner {
-            width: 28px;
-            height: 28px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
+        /* Progress bar container — shown inside the state-box while scraping */
+        .progress-wrap {
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
         }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-track {
+            width: 100%;
+            height: 3px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            width: 0%;
+            /* Smooth the bar between poll updates (server polls every 1s) */
+            transition: width 0.8s ease;
+        }
+
+        /* Indeterminate shimmer shown before total is known */
+        .progress-fill.indeterminate {
+            width: 30% !important;
+            animation: shimmer 1.4s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%   { transform: translateX(-200%); }
+            100% { transform: translateX(400%); }
+        }
+
+        .progress-label {
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+        }
 
         /* Grid */
         .grid {
@@ -146,8 +176,6 @@
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 1px;
             background: var(--border);
-            margin: 0;
-            padding: 0;
         }
 
         /* Card */
@@ -187,7 +215,6 @@
 
         .card:hover .card-img-wrap img { transform: scale(1.04); }
 
-        /* Stock badge on image */
         .stock-badge {
             position: absolute;
             top: 10px;
@@ -200,20 +227,9 @@
             z-index: 1;
         }
 
-        .stock-badge.in-stock {
-            background: var(--green);
-            color: #0a1a10;
-        }
-
-        .stock-badge.out-stock {
-            background: var(--red);
-            color: #fff;
-        }
-
-        .stock-badge.unknown {
-            background: #444;
-            color: var(--muted);
-        }
+        .stock-badge.in-stock  { background: var(--green); color: #0a1a10; }
+        .stock-badge.out-stock { background: var(--red);   color: #fff; }
+        .stock-badge.unknown   { background: #444;         color: var(--muted); }
 
         .card-body {
             padding: 14px 16px 18px;
@@ -251,14 +267,12 @@
             flex-shrink: 0;
         }
 
-        .card-stock-line.in-stock { color: var(--green); }
-        .card-stock-line.in-stock::before { background: var(--green); }
-
+        .card-stock-line.in-stock  { color: var(--green); }
+        .card-stock-line.in-stock::before  { background: var(--green); }
         .card-stock-line.out-stock { color: var(--red); }
         .card-stock-line.out-stock::before { background: var(--red); }
-
-        .card-stock-line.unknown { color: var(--muted); }
-        .card-stock-line.unknown::before { background: var(--muted); }
+        .card-stock-line.unknown   { color: var(--muted); }
+        .card-stock-line.unknown::before   { background: var(--muted); }
     </style>
 </head>
 <body>
@@ -287,6 +301,7 @@
 <script>
     let allProducts = [];
     let currentFilter = 'all';
+    let progressInterval = null; // holds the setInterval ID so we can cancel it
 
     async function loadProducts() {
         const btn = document.getElementById('load-btn');
@@ -297,22 +312,26 @@
         btn.textContent = 'Loading...';
         filterBar.style.display = 'none';
 
-        content.innerHTML = `
-            <div class="state-box">
-                <div class="spinner"></div>
-                <span>Fetching products...</span>
-            </div>`;
+        // Show the progress bar UI immediately — starts in indeterminate mode
+        // (shimmer animation) until the server reports a total product count.
+        showProgressBar(0, 0);
+
+        // Poll /progress every second so the bar stays live during the scrape.
+        // We store the interval ID so we can clear it once the fetch resolves.
+        progressInterval = setInterval(pollProgress, 1000);
 
         try {
             const res = await fetch('http://localhost:3000/products');
             if (!res.ok) throw new Error(`Server returned ${res.status}`);
             allProducts = await res.json();
 
+            stopProgressPolling();
+
             filterBar.style.display = 'flex';
             setFilter(currentFilter);
-
             btn.textContent = 'Refresh';
         } catch (err) {
+            stopProgressPolling();
             content.innerHTML = `
                 <div class="state-box">
                     <span>Failed to load — is the server running?</span>
@@ -322,6 +341,62 @@
         }
 
         btn.disabled = false;
+    }
+
+    // Fetch current scrape progress from the server and update the bar.
+    async function pollProgress() {
+        try {
+            const res = await fetch('http://localhost:3000/progress');
+            if (!res.ok) return;
+            const { current, total } = await res.json();
+            showProgressBar(current, total);
+        } catch {
+            // Server not ready yet — silently ignore and retry next interval
+        }
+    }
+
+    function stopProgressPolling() {
+        if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
+    }
+
+    // Render (or update) the progress bar state box.
+    // When total is 0 we don't yet know how many products there are, so show
+    // the indeterminate shimmer. Once total > 0 show the real percentage.
+    function showProgressBar(current, total) {
+        const content = document.getElementById('content');
+
+        const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+        const label = total > 0
+            ? `Checking product ${current} of ${total} — ${pct}%`
+            : 'Fetching product list...';
+
+        // Only rebuild the DOM on the first call — after that just update the
+        // fill width and label text so the CSS transition animates smoothly.
+        let fill = content.querySelector('.progress-fill');
+        let labelEl = content.querySelector('.progress-label');
+
+        if (!fill) {
+            // First render — build the full loading state
+            content.innerHTML = `
+                <div class="state-box">
+                    <div class="progress-wrap">
+                        <div class="progress-track">
+                            <div class="progress-fill ${total === 0 ? 'indeterminate' : ''}"></div>
+                        </div>
+                        <span class="progress-label">${label}</span>
+                    </div>
+                </div>`;
+        } else {
+            // Subsequent renders — just update fill and label
+            if (total > 0) {
+                fill.classList.remove('indeterminate');
+                fill.style.width = `${pct}%`;
+            }
+            labelEl.textContent = label;
+        }
     }
 
     function setFilter(filter, el) {
@@ -334,7 +409,8 @@
         if (filter === 'in')  filtered = allProducts.filter(p => p.smallOutOfStock === false);
         if (filter === 'out') filtered = allProducts.filter(p => p.smallOutOfStock === true);
 
-        document.getElementById('result-count').textContent = `${filtered.length} item${filtered.length !== 1 ? 's' : ''}`;
+        document.getElementById('result-count').textContent =
+            `${filtered.length} item${filtered.length !== 1 ? 's' : ''}`;
         renderProducts(filtered);
     }
 
