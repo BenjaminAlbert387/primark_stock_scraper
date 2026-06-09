@@ -9,9 +9,14 @@ export async function getProducts(categoryUrl, maxPages = 2) {
 
     const CONCURRENCY = 4;
 
+    // FIX 1: Add ERR_FAILED / net:: errors to the suppressed list — these are
+    // caused by intentionally aborted requests (images, fonts, CSS) and are
+    // harmless noise. Playwright logs them as browser console errors even though
+    // we deliberately aborted them.
     const suppressedErrors = [
         "GraphQL", "Apollo", "getCCStock", "preloaded using link preload",
-        "OneTrust", "_br_uid_2", "status of 400", "status of 403"
+        "OneTrust", "_br_uid_2", "status of 400", "status of 403",
+        "ERR_FAILED", "ERR_ABORTED", "net::", "Failed to load resource"
     ];
 
     async function makePage() {
@@ -21,7 +26,8 @@ export async function getProducts(categoryUrl, maxPages = 2) {
             if (suppressedErrors.some(e => text.includes(e))) return;
             if (msg.type() === "error") console.log("BROWSER ERROR:", text);
         });
-        // Block images, fonts and CSS — not needed, saves a lot of bandwidth and time
+        // Block images, fonts and CSS — not needed, saves bandwidth and time.
+        // Note: we also suppress the resulting ERR_FAILED console noise above.
         await page.route("**/*", route => {
             const type = route.request().resourceType();
             if (["image", "font", "stylesheet", "media"].includes(type)) {
@@ -33,7 +39,7 @@ export async function getProducts(categoryUrl, maxPages = 2) {
         return page;
     }
 
-    // Step 1: Scrape product URLs (single page, fast enough)
+    // Step 1: Scrape product URLs
     const categoryPage = await makePage();
     const productUrls = [];
 
@@ -80,7 +86,6 @@ export async function getProducts(categoryUrl, maxPages = 2) {
     // Step 2: Check stock in parallel using a concurrency pool
     const results = [];
     const queue = [...productUrls];
-    let completed = 0;
 
     async function worker() {
         const page = await makePage();
@@ -89,7 +94,9 @@ export async function getProducts(categoryUrl, maxPages = 2) {
             const productUrl = queue.shift();
             if (!productUrl) break;
 
-            console.log(`[${++completed}/${productUrls.length}] ${productUrl}`);
+            // FIX 3: Avoid shared-counter race condition across concurrent workers.
+            // Using queue length remaining is safe because queue.shift() is synchronous.
+            console.log(`[${productUrls.length - queue.length}/${productUrls.length}] ${productUrl}`);
 
             try {
                 await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -111,30 +118,47 @@ export async function getProducts(categoryUrl, maxPages = 2) {
                 }
 
                 const productData = await page.evaluate(() => {
+                    // FIX 2: Robust size matching helper.
+                    // - Handles size being a string OR an array (Primark's schema is inconsistent)
+                    // - Uses exact equality only: "S" and "SMALL", NOT substring match.
+                    //   This prevents "XS", "XS/S", "2XS" etc. from matching.
+                    function isSmallSize(sizeValue) {
+                        const normalize = s => s.trim().toUpperCase();
+                        const isExactSmall = s => s === "S" || s === "SMALL";
+
+                        if (Array.isArray(sizeValue)) {
+                            return sizeValue.map(normalize).some(isExactSmall);
+                        }
+                        if (typeof sizeValue === "string") {
+                            return isExactSmall(normalize(sizeValue));
+                        }
+                        return false;
+                    }
+
                     const scripts = document.querySelectorAll('script[type="application/ld+json"]');
                     for (const script of scripts) {
                         try {
                             const json = JSON.parse(script.textContent);
                             if (json["@type"] !== "ProductGroup") continue;
 
-                            const variants = json.hasVariant || [];
+                            const variants = Array.isArray(json.hasVariant) ? json.hasVariant : [];
                             let smallInStock = false;
 
-                            for (const variant of variants) {
-                                const sizes = variant.size || [];
-                                const inStock = variant.offers?.availability === "https://schema.org/InStock";
-                                const hasSmall = sizes.some(s => {
-                                    const size = s.toUpperCase();
-                                    return size === "S" || size === "SMALL";
-                                });
-                                if (hasSmall && inStock) { smallInStock = true; break; }
-                            }
-
-                            if (!smallInStock && variants.length === 0) {
-                                const sizes = json.size || [];
+                            if (variants.length > 0) {
+                                // Normal path: product has colour/size variants
+                                for (const variant of variants) {
+                                    const inStock = variant.offers?.availability === "https://schema.org/InStock";
+                                    if (inStock && isSmallSize(variant.size)) {
+                                        smallInStock = true;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // Fallback path: no hasVariant array — check top-level size/offers
                                 const inStock = json.offers?.availability === "https://schema.org/InStock";
-                                const hasSmall = sizes.some(s => s.toUpperCase() === "S" || s.toUpperCase() === "SMALL");
-                                if (hasSmall && inStock) smallInStock = true;
+                                if (inStock && isSmallSize(json.size)) {
+                                    smallInStock = true;
+                                }
                             }
 
                             return {
@@ -164,7 +188,6 @@ export async function getProducts(categoryUrl, maxPages = 2) {
         await page.close();
     }
 
-    // Spin up CONCURRENCY workers and wait for all to finish
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
     await browser.close();
