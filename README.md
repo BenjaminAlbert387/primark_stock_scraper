@@ -87,3 +87,11 @@ http://localhost:3000
 * Check console logs to see which SKUs are being fetched.
 * Increase timeouts in `server.js` if pages fail to load.
 * Ensure your network allows Chromium to access the Primark site.
+
+---
+
+## Live Demo
+https://github.com/user-attachments/assets/b7802111-6b58-4eb7-acf4-8937ec435f9b
+
+
+
